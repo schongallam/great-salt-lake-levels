@@ -1,14 +1,4 @@
-# Source:
-# USGS National Water Information System
-# Accessed 2024-05-24
-# North GSL: Saline, UT (Site 10010100)
-# https://waterdata.usgs.gov/nwis/dv?referred_module=sw&site_no=10010100
-# https://waterdata.usgs.gov/nwis/dv?cb_62614=on&format=rdb&site_no=10010100&legacy=&referred_module=sw&period=&begin_date=1966-04-15&end_date=2024-05-23
-# South GSL: Saltair Boat Harbor (site 10010000)
-# https://waterdata.usgs.gov/nwis/dv?referred_module=sw&site_no=10010000
-# https://waterdata.usgs.gov/nwis/dv?cb_62614=on&format=rdb&site_no=10010000&legacy=&referred_module=sw&period=&begin_date=1847-10-18&end_date=2024-05-23
-
-# hat tip: https://www.nytimes.com/2024/05/16/climate/great-salt-lake-water-levels.html
+# Great Salt Lake Water Levels
 
 library(readr)
 library(dplyr)
@@ -36,10 +26,8 @@ gsl.S <- gsl.S %>%
 # Set up a data frame for ggplot ----
 # Gather annual min and max levels
 
-#gsl.N$Year <- format(gsl.N$Date, '%Y') # 'Date' object becomes a 'chr' here
-#gsl.S$Year <- format(gsl.S$Date, '%Y') # so don't use it
-gsl.N$Year <- as.numeric(format(gsl.N$Date, '%Y')) # now it becomes 'numeric'
-gsl.S$Year <- as.numeric(format(gsl.S$Date, '%Y')) # not suitable for time series!
+gsl.N$Year <- as.numeric(format(gsl.N$Date, '%Y'))
+gsl.S$Year <- as.numeric(format(gsl.S$Date, '%Y'))
 
 gsl.N.years <- unique(gsl.N$Year)
 gsl.S.years <- unique(gsl.S$Year)
@@ -61,7 +49,7 @@ gsl.minmax <- full_join(gsl.N.minmax, gsl.S.minmax)
 
 
 # Visualize water level vs year ----
-# Full time series, and recent time series
+# Full time series, and "recent" time series (see README)
 
 library(ggplot2)
 
@@ -135,7 +123,7 @@ gsl.N.xts <- xts(gsl.N$Feet, gsl.N$Date)
 gsl.S.xts <- xts(gsl.S$Feet, gsl.S$Date)
 gsl.xts <- merge(gsl.N.xts, gsl.S.xts)
 
-#acf(gsl.N.xts, na.action=na.pass) # meh
+acf(gsl.N.xts, na.action=na.pass)
 
 gsl.N.xts.annual <- to.yearly(gsl.N.xts) # effectively only goes back as far as 1966
 gsl.S.xts.annual <- to.yearly(gsl.S.xts)
@@ -148,17 +136,7 @@ gsl.S.xts.annual <- to.yearly(gsl.S.xts)
 # Somewhat arbitrarily, picking North GSL annual highs.  Using lows gives
 # a similar result.
 
-## template:
-#gsl.N.speci <- gsl.N.xts.annual['1966/2024']
-#m.speci <- lm(coredata(gsl.N.speci$gsl.N.xts.Low) ~ index(gsl.N.speci))
-#m.speci.dt <- xts(resid(m.speci), index(gsl.N.speci))
-#plot(m.speci.dt, main="De-trended lake level, 1966-2024")
-#m.speci.dt.acf <- acf(m.speci.dt, lag.max = 400, ylim=c(-0.6, 1.0), plot=FALSE)
-#plot(m.speci.dt.acf,
-#     main="Autocorrelation function for de-trended lake data, 1966-2024",
-#     xlab="Lag (years)")
-#Box.test(gsl.N.speci$gsl.N.xts.Low)
-
+# For ease of comparing different time series starting points
 lake.acf <- function(time.series, start.year, stop.year) {
  block <- time.series[sprintf("%s/%s",start.year,stop.year)]
  block.level <- coredata(block$gsl.N.xts.Low)
@@ -181,19 +159,18 @@ lake.acf <- function(time.series, start.year, stop.year) {
 years = seq(1983, 1988, 1)
 sapply(years, lake.acf, time.series=gsl.N.xts.annual, stop.year=2024)
 
+# Sample of interest for figure generation
 lake.acf.86 <- lake.acf(gsl.N.xts.annual, 1986, 2024)
 
 svg("Detrend1986-2024.svg", width=11, height=8)
-plot(lake.acf.86[[1]], main="De-trended Lake Level")
+plot(lake.acf.86[[1]],
+     main="De-trended Lake Level")
 dev.off()
     
 svg("ACF1986-2024.svg", width=11, height=8)
-plot(lake.acf.86[[2]], main="Autocorrelation function for de-trended lake level time series")
+plot(lake.acf.86[[2]],
+     main="Autocorrelation function for de-trended lake level time series")
 dev.off()
-
-# Partial autocorrelation
-
-pacf(gsl.N.xts.annual)
 
 
 # Check for mean reversion ----
@@ -216,26 +193,17 @@ plot(level.recent ~ year.recent,
 mtext(side=3, line=0.5, adf.sub)
 abline(gsl.recent.m, lty=2)
 
-# Notes:
-# - this function auto-de-trends
-# - the period 1986-2024 has a p-value < 0.01
-# - the period 1987-2024 has a p-value of ~0.069
-# - by including that one extra year at the beginning, implies mean reversion
-
 library(fUnitRoots)
 adfTest(na.omit(coredata(gsl.xts['1986/2024']$gsl.N.xts)), type='nc')
-# Notes:
-# - run with various combinations of starting 1986/1987, or type=ct|c|nc,
-#   p value is roughly between 0.07 and < 0.01
-# - if type=nc (no de-trending or recentering), result implies mean reversion
-#   regardless of starting year
-# - overall similar results to tseries::adf.test
-# - conclusion: mean reversion is not ruled out
+
 
 # ARIMA modeling, just for fun ----
+# Not particularly representative of anything, however
+
+pacf(na.omit(gsl.N.xts["1987/2024"]))
 
 library(forecast)
-gsl.N.arima <- auto.arima(gsl.N.xts['1986/2024'])
+gsl.N.arima <- auto.arima(gsl.N.xts['1987/2024'])
 checkresiduals(gsl.N.arima)
 plot(gsl.N.arima)
 confint(gsl.N.arima)
